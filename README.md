@@ -4,22 +4,23 @@ A Mac menu-bar app for an [IKEA IDÅSEN (Linak)](https://www.ikea.com/au/en/p/id
 
 Apple Silicon only. Ad-hoc signed (not notarized).
 
+This is a small personal fork so the desk can be driven **from the Mac**, especially via **dedicated keyboard shortcuts / AppleScript**. It is not a product. Issues and pull requests are welcome; maintenance is **best effort** and the app is not expected to move much.
+
 [**Download the latest release**](../../releases/latest)
 
 ## Why this repo exists
 
-The original native app is [DWilliames/idasen-desk-controller-mac](https://github.com/DWilliames/idasen-desk-controller-mac) (MIT, 2021). Last binary release: **1.0.2** (June 2022). It still works, but:
+The original native app is [DWilliames/idasen-desk-controller-mac](https://github.com/DWilliames/idasen-desk-controller-mac) (MIT, 2021). Last binary release: **1.0.2** (June 2022). On this machine it **just worked** — including after sleep and idle. No stall, no 2 cm pulse. The only reason to leave it was macOS: the nested **Launch at Login helper is Intel-only**, so Tahoe warns that support for Intel-based apps is ending (Rosetta goes away with macOS 28, ~fall 2027). That helper is what made 1.0.2 feel like a dead end.
 
-- The **Launch at Login helper is Intel-only**, so macOS Tahoe warns that support for Intel-based apps is ending (Rosetta goes away with macOS 28, ~fall 2027).
-- After sleep/idle, the desk can **move a couple of centimetres and stall**. That is [issue #3](https://github.com/DWilliames/idasen-desk-controller-mac/issues/3) on the original: CoreBluetooth looks `.connected` while GATT height notifications are dead. The 1.0.1 “reconnect on wake” fix only runs when the peripheral is `.disconnected`, so a zombie link is ignored.
+[marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) is a native Apple Silicon rebuild (v2.1.5). It was the obvious next step. After about a day and a half:
 
-[marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) rebuilt the app for Apple Silicon (v2.1.5). We used it as a **starting point**, then stopped depending on it:
+- Right after launch, sit/stand shortcuts worked as before.
+- After the app had been sitting in the menu bar for a while, the shortcut moved the desk **about 2 cm and stopped**.
+- Pressing it again did **nothing**.
 
-- Issues are **disabled** on that fork — nowhere to report the stall.
-- CoreBluetooth was moved onto the **main queue** (`@MainActor`). A menu-bar app gets App Nap; height notifies die overnight; F17/F18 send **one** Linak pulse (~2 cm) and stop. The next keypress is a no-op (`distSincePrev=0`).
-- Arrow buttons already had a 0.4 s hold timer so they do not depend on notifies. **AppleScript / keyboard shortcuts did not.**
+That is a zombie BLE link: CoreBluetooth still says `.connected`, but height notifications are dead. Linak only moves for about a second per GATT write; the app needs those notifies to keep pulsing. Arrow buttons already had a 0.4 s hold timer, so they hide the bug. **AppleScript / keyboard shortcuts do not.** Marco’s repo has **issues disabled**, so there was nowhere to report it.
 
-This repo keeps the original MIT code + Apple Silicon work, and actually **reconnects a zombie `.connected` link** before a sit/stand move.
+This repo starts from that Apple Silicon code, keeps the original MIT app name (so existing shortcuts keep working), and **force-reconnects** a zombie `.connected` link before a targeted sit/stand move. Published for anyone who hit the same shortcut stall and wants a native, scriptable controller without an Intel helper.
 
 ## What we changed
 
@@ -37,9 +38,11 @@ This repo keeps the original MIT code + Apple Silicon work, and actually **recon
 |---|---|---|---|
 | Original 1.0.2 (universal, Intel helper) | ~24 h | 27 MB | 27 MB |
 | Marco 2.1.5 (arm64) | ~19 min | 23 MB | 25 MB |
-| This fork 3.0.0 (arm64) | ~1 min | 11 MB | 12 MB |
+| This fork 3.0.0 (arm64) | ~56 min | 17 MB | 17 MB |
 
 Idle CPU was 0 % in all three cases. RSS is higher than footprint (shared pages); compare **footprint**, not RSS.
+
+It stays small because there is almost nothing running: a menu-bar accessory (no window, no web view), **arm64 only** (no Intel slice), and **no nested login helper process**. Launch at login uses `SMAppService` inside the same app. The original’s extra Intel helper is both the Tahoe warning and a second resident binary.
 
 ## Requirements
 
@@ -92,7 +95,7 @@ The toggle applies immediately (no restart). The file grows without rotation —
 
 ## Build from source
 
-Needs Xcode (full app, not only Command Line Tools).
+Needs the full **Xcode** app (not only Command Line Tools). Releases are built on GitHub Actions, so you do not need Xcode installed to *use* the app.
 
 ```sh
 xcodebuild -project "Desk Controller.xcodeproj" -scheme "Desk Controller" \
