@@ -28,13 +28,6 @@ class PreferencesWindowController: NSWindowController {
     var deskController: DeskController? {
         didSet {
             deskPosition = deskController?.desk.position
-            // Always (re-)register the position observer with the *current*
-            // DeskController. The controller is rebuilt on every BT
-            // reconnect, so a one-time hookup in windowDidLoad would point
-            // at a stale instance after a reconnect.
-            deskController?.onPositionChange({ [weak self] position in
-                self?.deskPosition = position
-            })
         }
     }
 
@@ -76,13 +69,18 @@ class PreferencesWindowController: NSWindowController {
 
         updateLabels()
 
-        // The first-load registration is a no-op when deskController is set
-        // via the property setter (didSet handles re-registration there);
-        // this covers the legacy code path where deskController existed
-        // before the property setter fired.
-        deskController?.onPositionChange({ [weak self] position in
-            self?.deskPosition = position
-        })
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(liveDeskPosition(_:)),
+            name: .deskPositionDidChange,
+            object: nil
+        )
+        deskPosition = DeskController.shared?.desk.position
+    }
+
+    @objc private func liveDeskPosition(_ note: Notification) {
+        let cm = (note.userInfo?["cm"] as? Float) ?? DeskController.shared?.desk.position
+        deskPosition = cm
     }
 
     /// Programmatically rebuild the autostand block (three rows: Stand every,
@@ -321,8 +319,11 @@ class PreferencesWindowController: NSWindowController {
     }
     
     override func showWindow(_ sender: Any?) {
+        deskController = DeskController.shared
         super.showWindow(sender)
         AppDelegate.bringToFront(window: self.window!)
+        deskPosition = DeskController.shared?.desk.position
+        refreshSchedulePreview()
     }
     
     func updateLabels() {

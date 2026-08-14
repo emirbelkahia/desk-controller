@@ -38,6 +38,7 @@ class DeskPeripheral: NSObject {
     var lastPositionNotification: Date = .distantPast
 
     var onPositionChange: (Float) -> Void = { _ in }
+    var onServicesReady: () -> Void = {}
     var position: Float? {
         didSet {
             if let position = position, hasLoadedPositionCharacteristicValues {
@@ -113,6 +114,11 @@ extension DeskPeripheral: CBPeripheralDelegate {
                 } else {
                     return
                 }
+            }
+
+            if positionCharacteristic != nil && controlCharacteristic != nil {
+                onServicesReady()
+                onServicesReady = {}
             }
         }
     }

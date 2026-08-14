@@ -58,6 +58,11 @@ class DeskController: NSObject {
             // AutoStand reread and (de-duped) broadcast on every position
             // update so the indicator flips when the desk crosses midpoint.
             self?.autoStand.deskPositionChanged()
+            NotificationCenter.default.post(
+                name: .deskPositionDidChange,
+                object: nil,
+                userInfo: ["cm": position]
+            )
         }
 
         DeskController.shared = self

@@ -720,10 +720,11 @@ class ViewController: NSViewController {
             }
         }
 
-        if let pending = BluetoothManager.shared.pendingMove {
+        desk.onServicesReady = {
+            guard let pending = BluetoothManager.shared.pendingMove else { return }
             BluetoothManager.shared.pendingMove = nil
-            dbg("applying pendingMove after reconnect")
-            controller?.moveToPosition(pending)
+            dbg("applying pendingMove after GATT is up")
+            DeskController.shared?.moveToPosition(pending)
         }
     }
 

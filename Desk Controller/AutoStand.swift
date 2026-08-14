@@ -16,6 +16,9 @@ extension Notification.Name {
     /// because `DeskController` (and its `AutoStand`) is rebuilt on every
     /// Bluetooth reconnect.
     static let autoStandPhaseChanged = Notification.Name("autoStandPhaseChanged")
+    /// Raw desk height in cm (`userInfo["cm"]`). Posted on every GATT
+    /// position notify so Preferences can follow while the window is open.
+    static let deskPositionDidChange = Notification.Name("deskPositionDidChange")
 }
 
 @MainActor

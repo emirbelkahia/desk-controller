@@ -19,7 +19,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var viewController: ViewController?
 
     /// Cached current phase for icon refresh de-duping.
-    private var lastIconPhase: AutoStand.Phase = .disabled
+    /// `nil` until the first draw — `.disabled` is also the launch default,
+    /// so seeding this with `.disabled` skipped the icon entirely.
+    private var lastIconPhase: AutoStand.Phase?
 
     /// Keep CoreBluetooth notifies alive overnight. Menu-bar accessories get
     /// App Nap'd; GATT subscriptions then die while the peripheral still

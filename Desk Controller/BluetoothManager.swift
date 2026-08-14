@@ -33,6 +33,12 @@ class BluetoothManager: NSObject {
     /// fire-and-forget; the move has to resume after DeskController is rebuilt.
     var pendingMove: Position?
 
+    /// True between `cancelPeripheralConnection` and the following `didConnect`.
+    /// Extra F-keys must not cancel an in-flight reconnect.
+    private var reconnecting = false
+    private var peripheralToRestore: CBPeripheral?
+    private var reconnectTimeout: DispatchWorkItem?
+
     override init() {
         super.init()
         startScanning()
@@ -41,7 +47,9 @@ class BluetoothManager: NSObject {
     func startScanning() {
         if centralManager == nil {
             centralManager = CBCentralManager(delegate: self, queue: nil)
+            return
         }
+        scanForDesk()
     }
 
     func reconnect() {
@@ -50,20 +58,76 @@ class BluetoothManager: NSObject {
         guard let peripheral, peripheral.state == .disconnected else {
             return
         }
+        pendingPeripheral = peripheral
         centralManager?.connect(peripheral, options: nil)
     }
 
     /// Tear down a zombie `.connected` link (writes may still land, GATT
     /// notifies don't) and connect again. Plain `reconnect()` is a no-op
     /// while `peripheral.state == .connected`.
+    ///
+    /// CoreBluetooth ignores `connect` until `didDisconnectPeripheral` fires.
+    /// Calling both in the same turn leaves us with no peripheral at all —
+    /// which is why F17/F18 looked dead after the first stale-notify attempt.
     func forceReconnect() {
-        guard let peripheral = connectedPeripheral ?? pendingPeripheral else {
-            startScanning()
+        if reconnecting {
+            dbg("forceReconnect: already in progress, keeping pendingMove")
             return
         }
-        dbg("forceReconnect() state=\(peripheral.state.rawValue) id=\(peripheral.identifier)")
+        guard let peripheral = connectedPeripheral ?? pendingPeripheral else {
+            dbg("forceReconnect: no peripheral — scanning")
+            scanForDesk()
+            return
+        }
+        reconnecting = true
+        peripheralToRestore = peripheral
+        pendingPeripheral = peripheral
+        dbg("forceReconnect() cancel, wait for disconnect state=\(peripheral.state.rawValue) id=\(peripheral.identifier)")
+        scheduleReconnectTimeout()
         centralManager?.cancelPeripheralConnection(peripheral)
-        centralManager?.connect(peripheral, options: nil)
+    }
+
+    /// Scan or adopt a desk macOS already holds. Safe to call when a
+    /// CBCentralManager already exists (`startScanning()` used to no-op then).
+    func scanForDesk() {
+        guard let central = centralManager, central.state == .poweredOn else {
+            if centralManager == nil {
+                startScanning()
+            }
+            return
+        }
+        let alreadyConnected = central.retrieveConnectedPeripherals(
+            withServices: [DeskPeripheral.deskControlServiceUUID]
+        )
+        if let desk = alreadyConnected.first {
+            dbg("scanForDesk: adopting already-connected \(desk.identifier)")
+            pendingPeripheral = desk
+            central.connect(desk, options: nil)
+            return
+        }
+        dbg("scanForDesk: scanning for advertisements")
+        central.scanForPeripherals(withServices: nil, options: nil)
+    }
+
+    private func scheduleReconnectTimeout() {
+        reconnectTimeout?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.reconnecting else { return }
+                dbg("forceReconnect: timeout — scanning")
+                self.reconnecting = false
+                self.scanForDesk()
+            }
+        }
+        reconnectTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+    }
+
+    private func finishReconnectAttempt() {
+        reconnectTimeout?.cancel()
+        reconnectTimeout = nil
+        reconnecting = false
+        peripheralToRestore = nil
     }
 }
 
@@ -80,27 +144,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
                 return
             }
 
-            if let peripheral = connectedPeripheral ?? pendingPeripheral, peripheral.state == .disconnected {
-                print("[BluetoothManager] reconnecting known peripheral \(peripheral.identifier)")
-                central.connect(peripheral, options: nil)
-                return
-            }
-
-            // Adopt any peripheral macOS already has connected on the IDÅSEN
-            // service — these will NOT show up via scanForPeripherals because
-            // they don't advertise while held by another connection.
-            let alreadyConnected = central.retrieveConnectedPeripherals(
-                withServices: [DeskPeripheral.deskControlServiceUUID]
-            )
-            if let desk = alreadyConnected.first {
-                print("[BluetoothManager] adopting already-connected peripheral \(desk.identifier) name=\(desk.name ?? "—")")
-                pendingPeripheral = desk
-                central.connect(desk, options: nil)
-                return
-            }
-
-            print("[BluetoothManager] no already-connected desk, starting advertising scan")
-            central.scanForPeripherals(withServices: nil, options: nil)
+            scanForDesk()
         }
     }
 
@@ -136,9 +180,14 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         MainActor.assumeIsolated {
-            guard peripheral == pendingPeripheral else {
+            let isRestore = peripheral == pendingPeripheral || peripheral == peripheralToRestore
+            guard isRestore else {
+                dbg("didConnect ignored (not pending) id=\(peripheral.identifier)")
                 return
             }
+
+            dbg("didConnect id=\(peripheral.identifier) name=\(peripheral.name ?? "—")")
+            finishReconnectAttempt()
 
             if stopOnFirstConnection {
                 central.stopScan()
@@ -153,26 +202,40 @@ extension BluetoothManager: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         MainActor.assumeIsolated {
+            dbg("didDisconnect id=\(peripheral.identifier) error=\(error?.localizedDescription ?? "nil") reconnecting=\(reconnecting)")
+
             if peripheral == connectedPeripheral {
                 connectedPeripheral = nil
             }
+            connectPeripheralRSSI = nil
+            onConnectedPeripheralChange(nil)
+
+            // Connect only after disconnect — `connect` during `.connected`
+            // is ignored by CoreBluetooth.
+            if reconnecting {
+                let target = peripheralToRestore ?? peripheral
+                pendingPeripheral = target
+                dbg("didDisconnect: reconnecting to \(target.identifier)")
+                central.connect(target, options: nil)
+                return
+            }
+
             if peripheral == pendingPeripheral {
                 pendingPeripheral = nil
             }
-            connectPeripheralRSSI = nil
-
-            onConnectedPeripheralChange(nil)
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         MainActor.assumeIsolated {
+            dbg("didFailToConnect id=\(peripheral.identifier) error=\(error?.localizedDescription ?? "nil")")
+            finishReconnectAttempt()
             if peripheral == pendingPeripheral {
                 pendingPeripheral = nil
             }
             connectPeripheralRSSI = nil
-
             onConnectedPeripheralChange(nil)
+            scanForDesk()
         }
     }
 
