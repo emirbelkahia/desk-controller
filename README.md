@@ -10,44 +10,29 @@ This is a small personal fork so the desk can be driven **from the Mac**, especi
 
 ## Why this repo exists
 
-The original native app is [DWilliames/idasen-desk-controller-mac](https://github.com/DWilliames/idasen-desk-controller-mac) (MIT, 2021). Last binary release: **1.0.2** (June 2022). On this machine it **just worked** — including after sleep and idle. No stall, no 2 cm pulse. The only reason to leave it was macOS: the nested **Launch at Login helper is Intel-only**, so Tahoe warns that support for Intel-based apps is ending (Rosetta goes away with macOS 28, ~fall 2027). That helper is what made 1.0.2 feel like a dead end.
+The original native app is [DWilliames/idasen-desk-controller-mac](https://github.com/DWilliames/idasen-desk-controller-mac) (MIT, 2021). Last binary release: **1.0.2** (June 2022). On this machine it **just worked** — including after sleep and idle. The only reason to leave it was macOS: the nested **Launch at Login helper is Intel-only**, so Tahoe warns that support for Intel-based apps is ending (Rosetta goes away with macOS 28, ~fall 2027). That helper is what made 1.0.2 feel like a dead end.
 
-[marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) is a native Apple Silicon rebuild (v2.1.5). It was the obvious next step. After about a day and a half:
+[marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) is a native Apple Silicon rebuild (v2.1.5) — credit to Marco for doing that port. On this machine, one thing didn't hold up: after the app had been sitting in the menu bar for a few hours, the sit/stand keyboard shortcuts stopped working until the app was restarted. The cause turned out to be a Bluetooth connection that still looks connected but has silently gone stale after a long idle. The on-screen arrow buttons masked the problem; keyboard shortcuts did not. With issues not enabled on that repo, a fork was the practical way to fix it for my own setup.
 
-- Right after launch, sit/stand shortcuts worked as before.
-- After the app had been sitting in the menu bar for a while, the shortcut moved the desk **about 2 cm and stopped**.
-- Pressing it again did **nothing**.
+In 2026, with [Cursor](https://cursor.com), there is not much reason to live with a menu-bar app that almost works: turning it into a build that fits my daily use was an afternoon, not a product roadmap. That is also why this fork exists.
 
-That is a zombie BLE link: CoreBluetooth still says `.connected`, but height notifications are dead. Linak only moves for about a second per GATT write; the app needs those notifies to keep pulsing. Arrow buttons already had a 0.4 s hold timer, so they hide the bug. **AppleScript / keyboard shortcuts do not.** Marco’s repo has **issues disabled**, so there was nowhere to report it.
+This repo starts from that Apple Silicon code, keeps the original MIT app name (so existing shortcuts keep working), and reconnects automatically when the Bluetooth link has gone stale before a sit/stand move. Published for anyone who hit the same shortcut stall and wants a native, scriptable controller without an Intel helper.
 
-In 2026, with [Cursor](https://cursor.com), there is not much reason to live with a menu-bar app that almost works. The original was frictionless here until the Intel warning; Marco broke the shortcuts after idle; turning that into a working, scriptable build is an afternoon, not a product roadmap. That is also why this fork exists.
+## What changed in this fork
 
-This repo starts from that Apple Silicon code, keeps the original MIT app name (so existing shortcuts keep working), and **force-reconnects** a zombie `.connected` link before a targeted sit/stand move. Published for anyone who hit the same shortcut stall and wants a native, scriptable controller without an Intel helper.
+The investigation and the fixes below were done with [Cursor](https://cursor.com) agents; I mostly described the symptoms and tested the results.
 
-## What we changed
+- The app now notices when the Bluetooth link has gone stale after a long idle and reconnects on its own before moving the desk — so keyboard shortcuts keep working after hours in the menu bar.
+- macOS is told not to put the app to sleep in the background, which was part of what killed the connection overnight.
+- Launch at login no longer needs the Intel-only helper (the reason to leave the original app in the first place).
+- The menu-bar icon shows up reliably, and Preferences shows the desk height live.
+- Opt-in debug log for troubleshooting.
 
-- If height notifications are older than 10 s, **force-reconnect** (cancel, wait for disconnect, then connect) and resume the pending move. A same-turn `connect()` is ignored by CoreBluetooth.
-- Keep-alive activity so App Nap is less likely to freeze GATT.
-- Re-subscribe + read height before a targeted move.
-- No Intel login helper. Launch at login uses `SMAppService`.
-- Menu-bar icon actually draws when auto-stand is off.
-- Preferences **Current height** / sit–stand gauge follow the desk live.
-- Opt-in file debug log.
+## Memory
 
-## Memory (measured)
+The goal is for this to stay an extremely light tool. Expect roughly **15–20 MB** in Activity Monitor when idle, with brief spikes while Preferences is open or the desk is moving; it settles back down afterwards. Idle CPU is 0 %.
 
-`phys_footprint` from macOS `footprint` (same number Activity Monitor calls Memory). Mac: Apple Silicon, macOS 26.5.
-
-| Build | Uptime | Footprint | Peak |
-|---|---|---|---|
-| Original 1.0.2 (universal, Intel helper) | ~24 h | 27 MB | 27 MB |
-| Marco 2.1.5 (arm64) | ~19 min | 23 MB | 25 MB |
-| This fork 3.0.0 (arm64), idle | ~56 min | 17 MB | 17 MB |
-| This fork 3.0.1 (arm64), prefs + moves | ~5 min | 31 MB | 147 MB |
-
-Idle CPU was 0 % in all cases. RSS is higher than footprint (shared pages); compare **footprint**, not RSS. The 147 MB peak is a spike while Preferences is open and the desk is moving; it is not the idle resident size.
-
-It stays small because there is almost nothing running: a menu-bar accessory (no window, no web view), **arm64 only** (no Intel slice), and **no nested login helper process**. Launch at login uses `SMAppService` inside the same app. The original’s extra Intel helper is both the Tahoe warning and a second resident binary.
+No memory growth has been observed so far across multi-hour sessions, but there has been no formal leak audit. If you see it creeping up over days, please open an issue.
 
 ## Requirements
 
@@ -127,7 +112,7 @@ Pushing a `v*` tag runs GitHub Actions: ad-hoc `.app`, zip, GitHub Release.
 - Original app: [David Williames](https://github.com/DWilliames).
 - Auto-stand scheduling: Johan Eklund ([@meck](https://github.com/meck)).
 - Apple Silicon / Swift concurrency work we started from: [marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) and its contributors (Martin Ryberg Laude, akucharczyk, and others).
-- Zombie-BLE reconnect + this packaging: Emir Belkahia.
+- Stale-connection fix + this packaging: Emir Belkahia.
 
 ## License
 
