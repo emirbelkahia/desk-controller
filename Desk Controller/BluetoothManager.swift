@@ -31,7 +31,25 @@ class BluetoothManager: NSObject {
 
     /// Target to apply once a force-reconnect finishes. AppleScript F17/F18
     /// fire-and-forget; the move has to resume after DeskController is rebuilt.
-    var pendingMove: Position?
+    var pendingMove: Position? {
+        didSet { pendingMoveSetAt = pendingMove == nil ? nil : Date() }
+    }
+    private var pendingMoveSetAt: Date?
+
+    /// Hand back the pending move and clear it. Returns nil if the request is
+    /// older than `maxAge` — a reconnect that only succeeds hours later must
+    /// not replay a stale F17/F18 and move the desk out of nowhere.
+    func consumePendingMove(maxAge: TimeInterval = 30) -> Position? {
+        defer { pendingMove = nil }
+        guard let move = pendingMove, let setAt = pendingMoveSetAt,
+              Date().timeIntervalSince(setAt) <= maxAge else {
+            if pendingMove != nil {
+                dbg("consumePendingMove: dropping stale pendingMove (age > \(Int(maxAge))s)")
+            }
+            return nil
+        }
+        return move
+    }
 
     /// True between `cancelPeripheralConnection` and the following `didConnect`.
     /// Extra F-keys must not cancel an in-flight reconnect.

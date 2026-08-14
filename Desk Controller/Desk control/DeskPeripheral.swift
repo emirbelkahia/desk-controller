@@ -137,6 +137,13 @@ extension DeskPeripheral: CBPeripheralDelegate {
         MainActor.assumeIsolated {
             if characteristic == positionCharacteristic, let value = characteristic.value, error == nil {
 
+                // The Idasen height characteristic is always 4 bytes, but a
+                // truncated packet would make value[0...3] trap out of range.
+                guard value.count >= 4 else {
+                    dbg("position notification IGNORED: short packet (\(value.count) bytes)")
+                    return
+                }
+
                 hasLoadedPositionCharacteristicValues = true
 
                 // Position = 16 Little Endian – Unsigned

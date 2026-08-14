@@ -706,6 +706,12 @@ class ViewController: NSViewController {
     }
 
     func setControllerFor(deskPeripheral: CBPeripheral) {
+        // The outgoing DeskController's AutoStand timers live on RunLoop.main
+        // and keep firing after the controller is replaced (their blocks talk
+        // to DeskController.shared). Unschedule them or every reconnect adds
+        // another sit/stand cycle running in parallel.
+        controller?.autoStand.unschedule()
+
         let desk = DeskPeripheral(peripheral: deskPeripheral)
 
         controller = DeskController(desk: desk)
@@ -721,8 +727,7 @@ class ViewController: NSViewController {
         }
 
         desk.onServicesReady = {
-            guard let pending = BluetoothManager.shared.pendingMove else { return }
-            BluetoothManager.shared.pendingMove = nil
+            guard let pending = BluetoothManager.shared.consumePendingMove() else { return }
             dbg("applying pendingMove after GATT is up")
             DeskController.shared?.moveToPosition(pending)
         }
