@@ -37,7 +37,7 @@ This repo keeps the original MIT code + Apple Silicon work, and actually **recon
 |---|---|---|---|
 | Original 1.0.2 (universal, Intel helper) | ~24 h | 27 MB | 27 MB |
 | Marco 2.1.5 (arm64) | ~19 min | 23 MB | 25 MB |
-| This fork 3.0.0 (arm64) | *measured after install* | — | — |
+| This fork 3.0.0 (arm64) | ~1 min | 11 MB | 12 MB |
 
 Idle CPU was 0 % in all three cases. RSS is higher than footprint (shared pages); compare **footprint**, not RSS.
 
