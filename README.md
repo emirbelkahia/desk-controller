@@ -2,27 +2,44 @@
 
 A Mac menu-bar app for an [IKEA IDÅSEN (Linak)](https://www.ikea.com/au/en/p/idasen-desk-sit-stand-black-beige-s79280979/) sit/stand desk.
 
-Apple Silicon only. Ad-hoc signed (not notarized).
-
-This is a small personal fork so the desk can be driven **from the Mac**, especially via **dedicated keyboard shortcuts / AppleScript**. It is not a product. Issues and pull requests are welcome; maintenance is **best effort** and the app is not expected to move much.
+Apple Silicon only. Ad-hoc signed (not notarized). Not a product: issues and pull requests are welcome; maintenance is **best effort**.
 
 [**Download the latest release**](../../releases/latest)
 
-## Why this repo exists
+## How I use it
 
-The original native app is [DWilliames/idasen-desk-controller-mac](https://github.com/DWilliames/idasen-desk-controller-mac) (MIT, 2021). Last binary release: **1.0.2** (June 2022). On this machine it **just worked** — including after sleep and idle. The only reason to leave it was macOS: the nested **Launch at Login helper is Intel-only**, so Tahoe warns that support for Intel-based apps is ending (Rosetta goes away with macOS 28, ~fall 2027). That helper is what made 1.0.2 feel like a dead end.
+I don’t drive the desk from the popover. Sit and stand are two keys on an Apple **Magic Keyboard**, via macOS **Automator** Quick Actions:
 
-[marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) is a native Apple Silicon rebuild (v2.1.5) — credit to Marco for doing that port. On this machine, one thing didn't hold up: after the app had been sitting in the menu bar for a few hours, the sit/stand keyboard shortcuts stopped working until the app was restarted. The cause turned out to be a Bluetooth connection that still looks connected but has silently gone stale after a long idle. The on-screen arrow buttons masked the problem; keyboard shortcuts did not. With issues not enabled on that repo, a fork was the practical way to fix it for my own setup.
+| Key | Service | AppleScript |
+|---|---|---|
+| F17 | `sit position` | `tell application "Desk Controller" to move to "68cm"` |
+| F18 | `stand position` | `tell application "Desk Controller" to move to "105cm"` |
 
-In 2026, with [Cursor](https://cursor.com), there is not much reason to live with a menu-bar app that almost works: turning it into a build that fits my daily use was an afternoon, not a product roadmap. That is also why this fork exists.
+The services live in `~/Library/Services/`. The app stays in the menu bar so AppleScript has something to talk to; **the keys are the UI**. Heights are whatever you set in Preferences (here: sit 68 cm, stand 105 cm).
 
-This repo starts from that Apple Silicon code, keeps the original MIT app name (so existing shortcuts keep working), and reconnects automatically when the Bluetooth link has gone stale before a sit/stand move. Published for anyone who hit the same shortcut stall and wants a native, scriptable controller without an Intel helper.
+## Why Marco wasn’t enough (for this)
+
+The original native app is [DWilliames/idasen-desk-controller-mac](https://github.com/DWilliames/idasen-desk-controller-mac) (MIT, 2021). Last binary: **1.0.2** (June 2022). On this machine it **just worked** — including after sleep and idle. The only reason to leave it was macOS: the nested **Launch at Login helper is Intel-only**, so Tahoe warns that support for Intel-based apps is ending (Rosetta goes away with macOS 28, ~fall 2027). That helper made 1.0.2 feel like a dead end.
+
+[marcobazzani/idasen-desk-controller-mac](https://github.com/marcobazzani/idasen-desk-controller-mac) rebuilt it for Apple Silicon (v2.1.5) — credit to Marco for that port. For someone who mostly clicks the on-screen arrows, it may be fine. For F17/F18 it was not.
+
+After about a day and a half in the menu bar:
+
+- F18 moved the desk **about 2 cm and stopped**.
+- Pressing it again did **nothing**.
+- Restarting the app fixed it, until the next long idle.
+
+The popover arrows still worked. They keep sending “move” while you hold them. A keyboard shortcut fires **once** and then depends on the desk reporting its height so the app can keep pulsing. After idle, Bluetooth still says connected, but those height updates have died — so you get one pulse, then silence. Marco’s repo has **issues disabled**, so a fork was the practical fix.
+
+In 2026, with [Cursor](https://cursor.com), there is not much reason to live with a menu-bar app that almost works. Fitting it to this daily use was an afternoon, not a product roadmap. That is also why this fork exists.
+
+This repo starts from that Apple Silicon code, keeps the original MIT app name (so the Automator services keep working), and reconnects when the Bluetooth link has gone stale **before** a sit/stand shortcut tries to move. Published for anyone whose real UI is a key, not a click.
 
 ## What changed in this fork
 
 The investigation and the fixes below were done with [Cursor](https://cursor.com) agents; I mostly described the symptoms and tested the results.
 
-- The app now notices when the Bluetooth link has gone stale after a long idle and reconnects on its own before moving the desk — so keyboard shortcuts keep working after hours in the menu bar.
+- The app now notices when the Bluetooth link has gone stale after a long idle and reconnects on its own **before** F17/F18 try to move — so the keys still work after hours in the menu bar.
 - macOS is told not to put the app to sleep in the background, which was part of what killed the connection overnight.
 - Launch at login no longer needs the Intel-only helper (the reason to leave the original app in the first place).
 - The menu-bar icon shows up reliably, and Preferences shows the desk height live.
@@ -51,18 +68,7 @@ xattr -dr com.apple.quarantine "/Applications/Desk Controller.app"
 
 4. Launch from `/Applications`. Grant Bluetooth when asked.
 
-The app name stays **Desk Controller** so existing AppleScript / Automator shortcuts keep working (`tell application "Desk Controller"`).
-
-## How I use it
-
-Apple **Magic Keyboard**, macOS **Automator** Quick Actions bound to **F17** and **F18**:
-
-| Key | Service | AppleScript |
-|---|---|---|
-| F17 | `sit position` | `tell application "Desk Controller" to move to "68cm"` |
-| F18 | `stand position` | `tell application "Desk Controller" to move to "105cm"` |
-
-The services live in `~/Library/Services/`. The app stays in the menu bar; the keys are the UI. Heights are whatever you set in Preferences (here: sit 68 cm, stand 105 cm).
+The app name stays **Desk Controller** so the Automator services above keep working (`tell application "Desk Controller"`).
 
 ## AppleScript
 
