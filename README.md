@@ -43,7 +43,7 @@ This repo starts from that Apple Silicon code, keeps the original MIT app name (
 | Original 1.0.2 (universal, Intel helper) | ~24 h | 27 MB | 27 MB |
 | Marco 2.1.5 (arm64) | ~19 min | 23 MB | 25 MB |
 | This fork 3.0.0 (arm64), idle | ~56 min | 17 MB | 17 MB |
-| This fork 3.0.0 (arm64), prefs + moves | ~5 min | 31 MB | 147 MB |
+| This fork 3.0.1 (arm64), prefs + moves | ~5 min | 31 MB | 147 MB |
 
 Idle CPU was 0 % in all cases. RSS is higher than footprint (shared pages); compare **footprint**, not RSS. The 147 MB peak is a spike while Preferences is open and the desk is moving; it is not the idle resident size.
 
