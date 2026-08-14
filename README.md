@@ -20,14 +20,18 @@ The original native app is [DWilliames/idasen-desk-controller-mac](https://githu
 
 That is a zombie BLE link: CoreBluetooth still says `.connected`, but height notifications are dead. Linak only moves for about a second per GATT write; the app needs those notifies to keep pulsing. Arrow buttons already had a 0.4 s hold timer, so they hide the bug. **AppleScript / keyboard shortcuts do not.** Marco’s repo has **issues disabled**, so there was nowhere to report it.
 
+In 2026, with [Cursor](https://cursor.com), there is not much reason to live with a menu-bar app that almost works. The original was frictionless here until the Intel warning; Marco broke the shortcuts after idle; turning that into a working, scriptable build is an afternoon, not a product roadmap. That is also why this fork exists.
+
 This repo starts from that Apple Silicon code, keeps the original MIT app name (so existing shortcuts keep working), and **force-reconnects** a zombie `.connected` link before a targeted sit/stand move. Published for anyone who hit the same shortcut stall and wants a native, scriptable controller without an Intel helper.
 
 ## What we changed
 
-- If height notifications are older than 10 s, **force-reconnect** (cancel + connect), then resume the pending move.
+- If height notifications are older than 10 s, **force-reconnect** (cancel, wait for disconnect, then connect) and resume the pending move. A same-turn `connect()` is ignored by CoreBluetooth.
 - Keep-alive activity so App Nap is less likely to freeze GATT.
 - Re-subscribe + read height before a targeted move.
 - No Intel login helper. Launch at login uses `SMAppService`.
+- Menu-bar icon actually draws when auto-stand is off.
+- Preferences **Current height** / sit–stand gauge follow the desk live.
 - Opt-in file debug log.
 
 ## Memory (measured)
@@ -38,9 +42,10 @@ This repo starts from that Apple Silicon code, keeps the original MIT app name (
 |---|---|---|---|
 | Original 1.0.2 (universal, Intel helper) | ~24 h | 27 MB | 27 MB |
 | Marco 2.1.5 (arm64) | ~19 min | 23 MB | 25 MB |
-| This fork 3.0.0 (arm64) | ~56 min | 17 MB | 17 MB |
+| This fork 3.0.0 (arm64), idle | ~56 min | 17 MB | 17 MB |
+| This fork 3.0.0 (arm64), prefs + moves | ~5 min | 31 MB | 147 MB |
 
-Idle CPU was 0 % in all three cases. RSS is higher than footprint (shared pages); compare **footprint**, not RSS.
+Idle CPU was 0 % in all cases. RSS is higher than footprint (shared pages); compare **footprint**, not RSS. The 147 MB peak is a spike while Preferences is open and the desk is moving; it is not the idle resident size.
 
 It stays small because there is almost nothing running: a menu-bar accessory (no window, no web view), **arm64 only** (no Intel slice), and **no nested login helper process**. Launch at login uses `SMAppService` inside the same app. The original’s extra Intel helper is both the Tahoe warning and a second resident binary.
 
@@ -62,6 +67,17 @@ xattr -dr com.apple.quarantine "/Applications/Desk Controller.app"
 4. Launch from `/Applications`. Grant Bluetooth when asked.
 
 The app name stays **Desk Controller** so existing AppleScript / Automator shortcuts keep working (`tell application "Desk Controller"`).
+
+## How I use it
+
+Apple **Magic Keyboard**, macOS **Automator** Quick Actions bound to **F17** and **F18**:
+
+| Key | Service | AppleScript |
+|---|---|---|
+| F17 | `sit position` | `tell application "Desk Controller" to move to "68cm"` |
+| F18 | `stand position` | `tell application "Desk Controller" to move to "105cm"` |
+
+The services live in `~/Library/Services/`. The app stays in the menu bar; the keys are the UI. Heights are whatever you set in Preferences (here: sit 68 cm, stand 105 cm).
 
 ## AppleScript
 
